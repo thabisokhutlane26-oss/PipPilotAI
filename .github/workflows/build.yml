@@ -1,4 +1,4 @@
-name: Build PipPilot AI APK
+name: Build PipPilot AI - Upgraded
 
 on:
   workflow_dispatch:
@@ -15,40 +15,237 @@ jobs:
 
       - name: Extract Android project
         run: |
+          rm -rf app_project
+          mkdir app_project
           unzip -o PipPilotAI_Android_Project.zip -d app_project
 
-      - name: Force Java and Kotlin to JVM 17
+      - name: Upgrade PipPilot AI
+        shell: bash
         run: |
-          cat >> app_project/app/build.gradle <<'EOF'
+          set -e
 
-          android {
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-              kotlinOptions {
-                  jvmTarget = '17'
-              }
-          }
+          MAIN=$(find app_project/app/src/main -type f -name "MainActivity.kt" | head -1)
+
+          if [ -z "$MAIN" ]; then
+            echo "ERROR: MainActivity.kt was not found"
+            exit 1
+          fi
+
+          echo "Using MainActivity: $MAIN"
+
+          PACKAGE=$(grep -m1 '^package ' "$MAIN" | sed 's/^package //' | tr -d '\r')
+
+          if [ -z "$PACKAGE" ]; then
+            PACKAGE="com.pippilot.ai"
+          fi
+
+          echo "Package: $PACKAGE"
+
+          mkdir -p app_project/app/src/main/res/drawable
+
+          cat > app_project/app/src/main/res/drawable/pippilot_background.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:angle="270"
+                  android:startColor="#02060D"
+                  android:centerColor="#071728"
+                  android:endColor="#03150F" />
+          </shape>
           EOF
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+          cat > app_project/app/src/main/res/drawable/ic_pippilot_robot.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+              <path
+                  android:fillColor="#07111F"
+                  android:pathData="M0,0h108v108h-108z" />
 
-      - name: Build APK
-        working-directory: app_project
-        run: gradle assembleDebug --no-daemon
+              <path
+                  android:fillColor="#22E676"
+                  android:pathData="M30,26h48c6,0 10,4 10,10v36c0,6 -4,10 -10,10H30c-6,0 -10,-4 -10,-10V36c0,-6 4,-10 10,-10z" />
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PipPilotAI-v1.0
-          path: app_project/app/build/outputs/apk/debug/*.apk
+              <path
+                  android:fillColor="#07111F"
+                  android:pathData="M34,42h12v12H34z" />
+
+              <path
+                  android:fillColor="#07111F"
+                  android:pathData="M62,42h12v12H62z" />
+
+              <path
+                  android:fillColor="#07111F"
+                  android:pathData="M40,66h28v6H40z" />
+
+              <path
+                  android:fillColor="#22E676"
+                  android:pathData="M51,14h6v12H51z" />
+
+              <path
+                  android:fillColor="#22E676"
+                  android:pathData="M20,20h10v6H20z" />
+
+              <path
+                  android:fillColor="#22E676"
+                  android:pathData="M78,20h10v6H78z" />
+          </vector>
+          EOF
+
+          cat > /tmp/MainActivity.kt <<'EOF'
+          package __PACKAGE__
+
+          import android.app.Activity
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.graphics.drawable.GradientDrawable
+          import android.view.Gravity
+          import android.view.View
+          import android.widget.*
+          import java.util.Locale
+          import kotlin.random.Random
+
+          class MainActivity : Activity() {
+
+              private val handler = Handler(Looper.getMainLooper())
+
+              private var balance = 10000.0
+              private var demoPrice = 1.17150
+              private var entryPrice = 1.17150
+              private var stopLoss = 1.16850
+              private var takeProfit = 1.17750
+
+              private var robotEnabled = true
+              private var demoEnabled = false
+              private var positionOpen = false
+              private var tradeDirection = "BUY"
+
+              private var tradeCount = 0
+              private var wins = 0
+              private var losses = 0
+
+              private lateinit var balanceText: TextView
+              private lateinit var equityText: TextView
+              private lateinit var floatingText: TextView
+              private lateinit var priceText: TextView
+              private lateinit var positionText: TextView
+              private lateinit var historyText: TextView
+              private lateinit var robotText: TextView
+              private lateinit var signalText: TextView
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  window.statusBarColor = Color.rgb(2, 6, 13)
+                  window.navigationBarColor = Color.rgb(2, 6, 13)
+
+                  buildDashboard()
+                  startDemoEngine()
+              }
+
+              private fun buildDashboard() {
+
+                  val scroll = ScrollView(this)
+
+                  scroll.setBackgroundResource(
+                      com.pippilot.ai.R.drawable.pippilot_background
+                  )
+
+                  val root = LinearLayout(this)
+                  root.orientation = LinearLayout.VERTICAL
+
+                  root.setPadding(
+                      dp(16),
+                      dp(14),
+                      dp(16),
+                      dp(28)
+                  )
+
+                  scroll.addView(root)
+
+                  // =========================
+                  // HEADER
+                  // =========================
+
+                  val header = LinearLayout(this)
+
+                  header.gravity = Gravity.CENTER_VERTICAL
+
+                  val icon = ImageView(this)
+
+                  icon.setImageResource(
+                      com.pippilot.ai.R.drawable.ic_pippilot_robot
+                  )
+
+                  header.addView(
+                      icon,
+                      LinearLayout.LayoutParams(
+                          dp(58),
+                          dp(58)
+                      )
+                  )
+
+                  val titleBox = LinearLayout(this)
+
+                  titleBox.orientation =
+                      LinearLayout.VERTICAL
+
+                  titleBox.setPadding(
+                      dp(12),
+                      0,
+                      0,
+                      0
+                  )
+
+                  // APP NAME
+                  titleBox.addView(
+                      text(
+                          "PipPilot AI",
+                          25,
+                          Color.WHITE,
+                          true
+                      )
+                  )
+
+                  // CREATOR NAME
+                  titleBox.addView(
+                      text(
+                          "Made by Thabiso Khutlane",
+                          12,
+                          Color.LTGRAY,
+                          false
+                      )
+                  )
+
+                  // APP TYPE
+                  titleBox.addView(
+                      text(
+                          "AI FOREX ROBOT",
+                          11,
+                          Color.rgb(34, 230, 118),
+                          true
+                      )
+                  )
+
+                  header.addView(
+                      titleBox,
+                      LinearLayout.LayoutParams(
+                          0,
+                          -2,
+                          1f
+                      )
+                  )
+
+                  root.addView(header)
+
+                  root.addView(space(12))
+
+                  // =========================
+                  // STATUS
