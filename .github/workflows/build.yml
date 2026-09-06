@@ -19,23 +19,11 @@ jobs:
           rm -rf app_project
           mkdir -p app_project
           unzip -o PipPilotAI_Android_Project.zip -d app_project
-          echo "Extracted OK"
-          ls app_project
 
-      - name: Inject REAL LIVE MainActivity with Deriv
+      - name: Inject REAL LIVE MainActivity
         run: |
           MAIN=$(find app_project/app/src/main -name "MainActivity.kt" | head -1)
-          echo "MainActivity: $MAIN"
-          PACKAGE=$(grep -m1 '^package ' "$MAIN" | sed 's/^package //' | tr -d '\r')
-          if [ -z "$PACKAGE" ]; then PACKAGE="com.pippilot.ai"; fi
-          echo "Package: $PACKAGE"
-
-          mkdir -p app_project/app/src/main/res/drawable
-          cat > app_project/app/src/main/res/drawable/pippilot_background.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"><gradient android:angle="270" android:startColor="#02060D" android:endColor="#03150F"/></shape>
-          EOF
-
+          echo "Injecting into $MAIN"
           cat > "$MAIN" <<'KOTLIN'
           package com.pippilot.ai
 
@@ -56,15 +44,10 @@ jobs:
               private val handler = Handler(Looper.getMainLooper())
               private val priceHistory = mutableListOf<Double>()
               private var livePrice = 0.0
-              private var isInTrade = false
-              private var entryPrice = 0.0
-
               private lateinit var priceText: TextView
               private lateinit var marketText: TextView
               private lateinit var signalText: TextView
               private lateinit var indicatorText: TextView
-              private lateinit var logText: TextView
-              private lateinit var tokenInput: EditText
 
               private fun isForexOpen(): Boolean {
                   val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
@@ -92,7 +75,6 @@ jobs:
                   if (l==0.0) return 100.0
                   val rs=g/l; return 100-(100/(1+rs))
               }
-
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   val sv = ScrollView(this)
@@ -101,29 +83,12 @@ jobs:
                       setBackgroundColor(Color.parseColor("#02060D"))
                       setPadding(30,60,30,30)
                   }
-
                   marketText = TextView(this).apply { textSize=16f; setTypeface(null,Typeface.BOLD); setTextColor(Color.WHITE) }
                   priceText = TextView(this).apply { textSize=24f; setTypeface(null,Typeface.BOLD); setTextColor(Color.parseColor("#22E676")) }
                   indicatorText = TextView(this).apply { textSize=14f; setTextColor(Color.LTGRAY) }
                   signalText = TextView(this).apply { textSize=18f; setTypeface(null,Typeface.BOLD); setTextColor(Color.WHITE) }
-                  logText = TextView(this).apply { textSize=12f; setTextColor(Color.GRAY) }
-                  tokenInput = EditText(this).apply { hint="Paste Deriv API Token for REAL MONEY"; setTextColor(Color.WHITE); setHintTextColor(Color.GRAY) }
-                  val tradeBtn = Button(this).apply { text="ENABLE REAL MONEY TRADING" }
-
-                  tradeBtn.setOnClickListener {
-                      Toast.makeText(this, "REAL LIVE MODE - Connecting to Deriv...", Toast.LENGTH_LONG).show()
-                      handler.post {
-                          logText.text="✅ REAL TRADE REQUEST at %.5f\nToken: ${tokenInput.text.take(5)}***\n".format(livePrice) + logText.text
-                          isInTrade=true; entryPrice=livePrice
-                      }
-                  }
-
-                  lay.addView(marketText); lay.addView(priceText); lay.addView(indicatorText); lay.addView(signalText); lay.addView(tokenInput); lay.addView(tradeBtn); lay.addView(logText)
+                  lay.addView(marketText); lay.addView(priceText); lay.addView(indicatorText); lay.addView(signalText)
                   sv.addView(lay); setContentView(sv)
-                  startLive()
-              }
-
-              private fun startLive() {
                   handler.post(object:Runnable{
                       override fun run(){
                           val o=isForexOpen()
@@ -136,7 +101,6 @@ jobs:
                       override fun run(){ fetchLive(); handler.postDelayed(this,2000) }
                   })
               }
-
               private fun fetchLive() {
                   thread {
                       try {
@@ -151,20 +115,41 @@ jobs:
                           else if(ema9<ema21 && rsi in 30.0..60.0){ sig="SELL"; conf=(70+(100-rsi)/3).toInt() }
                           handler.post {
                               priceText.text="EUR/USD %.5f LIVE".format(livePrice)
-                              indicatorText.text="EMA9 %.5f | EMA21 %.5f\nRSI %.1f | Ticks %d".format(ema9,ema21,rsi,priceHistory.size)
-                              signalText.text=if(conf>70) "🔥 $sig SIGNAL $conf%% @ %.5f".format(livePrice) else "WAIT - Confidence $conf%%"
-                              signalText.setTextColor(if(sig=="BUY") Color.parseColor("#22E676") else if(sig=="SELL") Color.RED else Color.GRAY)
+                              indicatorText.text="EMA9 %.5f | EMA21 %.5f\nRSI %.1f".format(ema9,ema21,rsi)
+                              signalText.text=if(conf>70) "🔥 $sig $conf%% @ %.5f".format(livePrice) else "WAIT $conf%%"
                           }
-                      } catch(e:Exception){
-                          handler.post{ logText.text="Feed Error: ${e.message}\n"+logText.text }
-                      }
+                      } catch(e:Exception){}
                   }
               }
           }
           KOTLIN
 
-          echo "REAL LIVE MainActivity injected"
-
-      - name: Add INTERNET permission FIXED
+      - name: Add INTERNET permission with Python
         run: |
-          MANIFEST=$(find app_project -name "AndroidManifest.xml
+          MANIFEST=$(find app_project -name AndroidManifest.xml | head -1)
+          echo "Found $MANIFEST"
+          python3 << 'PY'
+          import pathlib
+          mf = list(pathlib.Path("app_project").rglob("AndroidManifest.xml"))[0]
+          txt = mf.read_text()
+          if "android.permission.INTERNET" not in txt:
+              txt = txt.replace("<manifest", '<manifest xmlns:android="http://schemas.android.com/apk/res/android"', 1) if "xmlns:android" not in txt else txt
+              txt = txt.replace("<application", ' <uses-permission android:name="android.permission.INTERNET" />\n <application', 1)
+              mf.write_text(txt)
+              print("Permission added")
+          else:
+              print("Already has permission")
+          print(mf.read_text()[:1000])
+          PY
+
+      - name: Build APK
+        run: |
+          cd app_project
+          chmod +x gradlew
+         ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PipPilotAI-v3.0-REAL-LIVE
+          path: app_project/app/build/outputs/apk/debug/*.apk
