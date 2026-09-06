@@ -1,39 +1,65 @@
-name: Build PipPilot AI - Upgraded
+name: Build PipPilot AI v2.0
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Get source
-        uses: actions/checkout@v4
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+    steps:
+
+      # 1. Get the GitHub repository
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      # 2. Extract the Android project
       - name: Extract Android project
+        shell: bash
         run: |
+          set -e
+
+          if [ ! -f "PipPilotAI_Android_Project.zip" ]; then
+            echo "ERROR: PipPilotAI_Android_Project.zip was not found."
+            exit 1
+          fi
+
           rm -rf app_project
-          mkdir app_project
+          mkdir -p app_project
+
           unzip -o PipPilotAI_Android_Project.zip -d app_project
 
+          echo "Project extracted successfully."
+          find app_project -maxdepth 3 -type f | head -100
+
+      # 3. Upgrade the app
       - name: Upgrade PipPilot AI
         shell: bash
         run: |
           set -e
 
-          MAIN=$(find app_project/app/src/main -type f -name "MainActivity.kt" | head -1)
+          MAIN=$(find app_project/app/src/main \
+            -type f \
+            -name "MainActivity.kt" \
+            | head -1)
 
           if [ -z "$MAIN" ]; then
-            echo "ERROR: MainActivity.kt was not found"
+            echo "ERROR: MainActivity.kt was not found."
             exit 1
           fi
 
-          echo "Using MainActivity: $MAIN"
+          echo "MainActivity found:"
+          echo "$MAIN"
 
-          PACKAGE=$(grep -m1 '^package ' "$MAIN" | sed 's/^package //' | tr -d '\r')
+          PACKAGE=$(grep -m1 '^package ' "$MAIN" \
+            | sed 's/^package //' \
+            | tr -d '\r')
 
           if [ -z "$PACKAGE" ]; then
             PACKAGE="com.pippilot.ai"
@@ -43,6 +69,7 @@ jobs:
 
           mkdir -p app_project/app/src/main/res/drawable
 
+          # Background
           cat > app_project/app/src/main/res/drawable/pippilot_background.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <shape xmlns:android="http://schemas.android.com/apk/res/android">
@@ -54,6 +81,7 @@ jobs:
           </shape>
           EOF
 
+          # Robot icon
           cat > app_project/app/src/main/res/drawable/ic_pippilot_robot.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -96,6 +124,7 @@ jobs:
           </vector>
           EOF
 
+          # Create upgraded MainActivity
           cat > /tmp/MainActivity.kt <<'EOF'
           package __PACKAGE__
 
@@ -154,98 +183,4 @@ jobs:
 
                   val scroll = ScrollView(this)
 
-                  scroll.setBackgroundResource(
-                      com.pippilot.ai.R.drawable.pippilot_background
-                  )
-
-                  val root = LinearLayout(this)
-                  root.orientation = LinearLayout.VERTICAL
-
-                  root.setPadding(
-                      dp(16),
-                      dp(14),
-                      dp(16),
-                      dp(28)
-                  )
-
-                  scroll.addView(root)
-
-                  // =========================
-                  // HEADER
-                  // =========================
-
-                  val header = LinearLayout(this)
-
-                  header.gravity = Gravity.CENTER_VERTICAL
-
-                  val icon = ImageView(this)
-
-                  icon.setImageResource(
-                      com.pippilot.ai.R.drawable.ic_pippilot_robot
-                  )
-
-                  header.addView(
-                      icon,
-                      LinearLayout.LayoutParams(
-                          dp(58),
-                          dp(58)
-                      )
-                  )
-
-                  val titleBox = LinearLayout(this)
-
-                  titleBox.orientation =
-                      LinearLayout.VERTICAL
-
-                  titleBox.setPadding(
-                      dp(12),
-                      0,
-                      0,
-                      0
-                  )
-
-                  // APP NAME
-                  titleBox.addView(
-                      text(
-                          "PipPilot AI",
-                          25,
-                          Color.WHITE,
-                          true
-                      )
-                  )
-
-                  // CREATOR NAME
-                  titleBox.addView(
-                      text(
-                          "Made by Thabiso Khutlane",
-                          12,
-                          Color.LTGRAY,
-                          false
-                      )
-                  )
-
-                  // APP TYPE
-                  titleBox.addView(
-                      text(
-                          "AI FOREX ROBOT",
-                          11,
-                          Color.rgb(34, 230, 118),
-                          true
-                      )
-                  )
-
-                  header.addView(
-                      titleBox,
-                      LinearLayout.LayoutParams(
-                          0,
-                          -2,
-                          1f
-                      )
-                  )
-
-                  root.addView(header)
-
-                  root.addView(space(12))
-
-                  // =========================
-                  // STATUS
+                 
