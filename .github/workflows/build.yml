@@ -17,17 +17,20 @@ jobs:
         run: |
           unzip -o PipPilotAI_Android_Project.zip -d app_project
 
-      - name: Fix Java and Kotlin compatibility
+      - name: Force Java and Kotlin to JVM 17
         run: |
-          find app_project -name "*.gradle" -type f -print0 | while IFS= read -r -d '' file; do
-            sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$file"
-            sed -i 's/JavaVersion.VERSION_8/JavaVersion.VERSION_17/g' "$file"
-            sed -i "s/jvmTarget[[:space:]]*=[[:space:]]*['\"]1.8['\"]/jvmTarget = '17'/g" "$file"
-            sed -i "s/jvmTarget[[:space:]]*=[[:space:]]*['\"]8['\"]/jvmTarget = '17'/g" "$file"
-          done
+          cat >> app_project/app/build.gradle <<'EOF'
 
-          echo "Checking Gradle Java settings:"
-          grep -R "VERSION_1_8\|VERSION_8\|jvmTarget" app_project --include="*.gradle" || true
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+          EOF
 
       - name: Set up Java
         uses: actions/setup-java@v4
