@@ -26,7 +26,6 @@ jobs:
           echo "Injecting into $MAIN"
           cat > "$MAIN" <<'KOTLIN'
           package com.pippilot.ai
-
           import android.app.Activity
           import android.os.Bundle
           import android.os.Handler
@@ -39,7 +38,6 @@ jobs:
           import org.json.JSONObject
           import kotlin.concurrent.thread
           import kotlin.math.abs
-
           class MainActivity : Activity() {
               private val handler = Handler(Looper.getMainLooper())
               private val priceHistory = mutableListOf<Double>()
@@ -48,7 +46,6 @@ jobs:
               private lateinit var marketText: TextView
               private lateinit var signalText: TextView
               private lateinit var indicatorText: TextView
-
               private fun isForexOpen(): Boolean {
                   val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
                   val d = cal.get(Calendar.DAY_OF_WEEK)
@@ -124,29 +121,23 @@ jobs:
           }
           KOTLIN
 
-      - name: Add INTERNET permission with Python
+      - name: Add INTERNET permission
         run: |
-          MANIFEST=$(find app_project -name AndroidManifest.xml | head -1)
-          echo "Found $MANIFEST"
           python3 << 'PY'
           import pathlib
           mf = list(pathlib.Path("app_project").rglob("AndroidManifest.xml"))[0]
           txt = mf.read_text()
           if "android.permission.INTERNET" not in txt:
-              txt = txt.replace("<manifest", '<manifest xmlns:android="http://schemas.android.com/apk/res/android"', 1) if "xmlns:android" not in txt else txt
               txt = txt.replace("<application", ' <uses-permission android:name="android.permission.INTERNET" />\n <application', 1)
               mf.write_text(txt)
-              print("Permission added")
-          else:
-              print("Already has permission")
-          print(mf.read_text()[:1000])
+          print("Manifest OK")
           PY
 
       - name: Build APK
         run: |
           cd app_project
           chmod +x gradlew
-         ./gradlew assembleDebug
+          ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
