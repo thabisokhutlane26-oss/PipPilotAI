@@ -19,11 +19,11 @@ jobs:
           rm -rf app_project
           mkdir -p app_project
           unzip -o PipPilotAI_Android_Project.zip -d app_project
+          find app_project -type f | head -20
 
       - name: Inject REAL LIVE MainActivity
         run: |
-          MAIN=$(find app_project/app/src/main -name "MainActivity.kt" | head -1)
-          echo "Injecting into $MAIN"
+          MAIN=$(find app_project -name "MainActivity.kt" | head -1)
           cat > "$MAIN" <<'KOTLIN'
           package com.pippilot.ai
           import android.app.Activity
@@ -75,41 +75,25 @@ jobs:
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   val sv = ScrollView(this)
-                  val lay = LinearLayout(this).apply {
-                      orientation=LinearLayout.VERTICAL
-                      setBackgroundColor(Color.parseColor("#02060D"))
-                      setPadding(30,60,30,30)
-                  }
+                  val lay = LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#02060D")); setPadding(30,60,30,30) }
                   marketText = TextView(this).apply { textSize=16f; setTypeface(null,Typeface.BOLD); setTextColor(Color.WHITE) }
                   priceText = TextView(this).apply { textSize=24f; setTypeface(null,Typeface.BOLD); setTextColor(Color.parseColor("#22E676")) }
                   indicatorText = TextView(this).apply { textSize=14f; setTextColor(Color.LTGRAY) }
                   signalText = TextView(this).apply { textSize=18f; setTypeface(null,Typeface.BOLD); setTextColor(Color.WHITE) }
                   lay.addView(marketText); lay.addView(priceText); lay.addView(indicatorText); lay.addView(signalText)
                   sv.addView(lay); setContentView(sv)
-                  handler.post(object:Runnable{
-                      override fun run(){
-                          val o=isForexOpen()
-                          marketText.text=if(o) "● MARKET OPEN - LIVE" else "● MARKET CLOSED"
-                          marketText.setTextColor(if(o) Color.parseColor("#22E676") else Color.RED)
-                          handler.postDelayed(this,10000)
-                      }
-                  })
-                  handler.post(object:Runnable{
-                      override fun run(){ fetchLive(); handler.postDelayed(this,2000) }
-                  })
+                  handler.post(object:Runnable{ override fun run(){ val o=isForexOpen(); marketText.text=if(o) "● MARKET OPEN - LIVE" else "● MARKET CLOSED"; marketText.setTextColor(if(o) Color.parseColor("#22E676") else Color.RED); handler.postDelayed(this,10000) } })
+                  handler.post(object:Runnable{ override fun run(){ fetchLive(); handler.postDelayed(this,2000) } })
               }
               private fun fetchLive() {
                   thread {
                       try {
                           val json = URL("https://api.exchangerate-api.com/v4/latest/EUR").readText()
                           val usd = JSONObject(json).getJSONObject("rates").getDouble("USD")
-                          livePrice=usd
-                          priceHistory.add(livePrice)
-                          if(priceHistory.size>100) priceHistory.removeAt(0)
+                          livePrice=usd; priceHistory.add(livePrice); if(priceHistory.size>100) priceHistory.removeAt(0)
                           val ema9=calcEMA(9); val ema21=calcEMA(21); val rsi=calcRSI()
                           var sig="WAIT"; var conf=0
-                          if(ema9>ema21 && rsi in 40.0..70.0){ sig="BUY"; conf=(70+rsi/3).toInt() }
-                          else if(ema9<ema21 && rsi in 30.0..60.0){ sig="SELL"; conf=(70+(100-rsi)/3).toInt() }
+                          if(ema9>ema21 && rsi in 40.0..70.0){ sig="BUY"; conf=(70+rsi/3).toInt() } else if(ema9<ema21 && rsi in 30.0..60.0){ sig="SELL"; conf=(70+(100-rsi)/3).toInt() }
                           handler.post {
                               priceText.text="EUR/USD %.5f LIVE".format(livePrice)
                               indicatorText.text="EMA9 %.5f | EMA21 %.5f\nRSI %.1f".format(ema9,ema21,rsi)
@@ -130,17 +114,19 @@ jobs:
           if "android.permission.INTERNET" not in txt:
               txt = txt.replace("<application", ' <uses-permission android:name="android.permission.INTERNET" />\n <application', 1)
               mf.write_text(txt)
-          print("Manifest OK")
+          print("Manifest fixed")
           PY
 
       - name: Build APK
         run: |
-          cd app_project
+          GRADLEW=$(find app_project -name "gradlew" | head -1)
+          echo "Found: $GRADLEW"
+          cd $(dirname "$GRADLEW")
           chmod +x gradlew
-          ./gradlew assembleDebug
+         ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PipPilotAI-v3.0-REAL-LIVE
-          path: app_project/app/build/outputs/apk/debug/*.apk
+          path: app_project/**/build/outputs/apk/debug/*.apk
