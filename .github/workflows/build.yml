@@ -1,113 +1,34 @@
-name: Build PipPilot AI v3.0 REAL LIVE
+name: Build PipPilot Android App
+
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v6
-      - name: Extract
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build APK
         run: |
-          rm -rf app_project
-          mkdir -p app_project
-          unzip -o PipPilotAI_Android_Project.zip -d app_project
-      - name: Inject REAL LIVE
-        run: |
-          MAIN=$(find app_project -name MainActivity.kt | head -1)
-          cat > "$MAIN" <<'KOTLIN'
-          package com.pippilot.ai
-          import android.app.Activity
-          import android.os.Bundle
-          import android.os.Handler
-          import android.os.Looper
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.widget.*
-          import java.util.*
-          import java.net.URL
-          import org.json.JSONObject
-          import kotlin.concurrent.thread
-          import kotlin.math.abs
-          class MainActivity : Activity() {
-              private val handler = Handler(Looper.getMainLooper())
-              private val history = mutableListOf<Double>()
-              private var price = 0.0
-              private lateinit var pText: TextView
-              private lateinit var mText: TextView
-              private lateinit var sText: TextView
-              private fun open(): Boolean {
-                  val c = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-                  val d = c.get(Calendar.DAY_OF_WEEK)
-                  val h = c.get(Calendar.HOUR_OF_DAY)
-                  if (d==Calendar.SATURDAY) return false
-                  if (d==Calendar.FRIDAY && h>=22) return false
-                  if (d==Calendar.SUNDAY && h<22) return false
-                  return true
-              }
-              private fun ema(n:Int):Double{
-                  if(history.size<n) return price
-                  var e=history.take(n).average()
-                  val k=2.0/(n+1)
-                  for(i in n until history.size) e=history[i]*k+e*(1-k)
-                  return e
-              }
-              private fun rsi():Double{
-                  if(history.size<15) return 50.0
-                  var g=0.0;var l=0.0
-                  for(i in history.size-14 until history.size){
-                      val d=history[i]-history[i-1]
-                      if(d>0) g+=d else l+=abs(d)
-                  }
-                  if(l==0.0) return 100.0
-                  val rs=g/l
-                  return 100-(100/(1+rs))
-              }
-              override fun onCreate(b: Bundle?) {
-                  super.onCreate(b)
-                  val sv=ScrollView(this)
-                  val lay=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(Color.parseColor("#02060D"));setPadding(30,60,30,30)}
-                  mText=TextView(this).apply{setTextColor(Color.WHITE)}
-                  pText=TextView(this).apply{textSize=24f;setTypeface(null,Typeface.BOLD);setTextColor(Color.parseColor("#22E676"))}
-                  sText=TextView(this).apply{textSize=18f;setTextColor(Color.WHITE)}
-                  lay.addView(mText);lay.addView(pText);lay.addView(sText)
-                  sv.addView(lay);setContentView(sv)
-                  handler.post(object:Runnable{override fun run(){mText.text=if(open()) "● MARKET OPEN - LIVE" else "● MARKET CLOSED";handler.postDelayed(this,5000)}})
-                  handler.post(object:Runnable{override fun run(){fetch();handler.postDelayed(this,2000)}})
-              }
-              private fun fetch(){
-                  thread{
-                      try{
-                          val j=URL("https://api.exchangerate-api.com/v4/latest/EUR").readText()
-                          val u=JSONObject(j).getJSONObject("rates").getDouble("USD")
-                          price=u;history.add(price);if(history.size>100) history.removeAt(0)
-                          val e9=ema(9);val e21=ema(21);val r=rsi()
-                          var sig="WAIT";if(e9>e21 && r>40 && r<70) sig="BUY";else if(e9<e21 && r>30 && r<60) sig="SELL"
-                          handler.post{pText.text="EUR/USD %.5f LIVE".format(price);sText.text="$sig RSI %.1f EMA9 %.5f EMA21 %.5f".format(r,e9,e21)}
-                      }catch(e:Exception){}
-                  }
-              }
-          }
-          KOTLIN
-      - name: Add Permission
-        run: |
-          python3 -c "
-          import pathlib
-          mf=list(pathlib.Path('app_project').rglob('AndroidManifest.xml'))[0]
-          t=mf.read_text()
-          if 'INTERNET' not in t:
-              t=t.replace('<application',' <uses-permission android:name=\"android.permission.INTERNET\" />\n <application',1)
-              mf.write_text(t)
-          "
-      - name: Build
-        run: |
-          GRADLEW=$(find app_project -name gradlew | head -1)
-          cd $(dirname $GRADLEW)
+          cd app_project
           chmod +x gradlew
           ./gradlew assembleDebug
-      - name: Upload
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PipPilot-REAL-LIVE
-          path: app_project/**/apk/debug/*.apk
+          path: app_project/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
