@@ -19,11 +19,12 @@ jobs:
           rm -rf app_project
           mkdir -p app_project
           unzip -o PipPilotAI_Android_Project.zip -d app_project
-          find app_project -type f | head -20
+          find app_project -name "gradlew" | head -5
 
       - name: Inject REAL LIVE MainActivity
         run: |
           MAIN=$(find app_project -name "MainActivity.kt" | head -1)
+          echo "Injecting $MAIN"
           cat > "$MAIN" <<'KOTLIN'
           package com.pippilot.ai
           import android.app.Activity
@@ -114,16 +115,18 @@ jobs:
           if "android.permission.INTERNET" not in txt:
               txt = txt.replace("<application", ' <uses-permission android:name="android.permission.INTERNET" />\n <application', 1)
               mf.write_text(txt)
-          print("Manifest fixed")
+          print("Manifest OK")
           PY
 
       - name: Build APK
         run: |
-          GRADLEW=$(find app_project -name "gradlew" | head -1)
-          echo "Found: $GRADLEW"
-          cd $(dirname "$GRADLEW")
+          GRADLEW=$(find app_project -name gradlew | head -1)
+          echo "Found $GRADLEW"
+          DIR=$(dirname "$GRADLEW")
+          cd "$DIR"
           chmod +x gradlew
-         ./gradlew assembleDebug --stacktrace
+          
+        ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
